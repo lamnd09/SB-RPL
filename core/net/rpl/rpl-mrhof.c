@@ -51,7 +51,7 @@
 #include "net/nbr-table.h"
 #include "net/link-stats.h"
 
-#define DEBUG DEBUG_NONE
+#define DEBUG DEBUG_PRINT
 #include "net/ip/uip-debug.h"
 
 /* RFC6551 and RFC6719 do not mandate the use of a specific formula to
@@ -114,6 +114,34 @@ dao_ack_callback(rpl_parent_t *p, int status)
 }
 #endif /* RPL_WITH_DAO_ACK */
 /*---------------------------------------------------------------------------*/
+
+static uint16_t
+getHopCount()
+{
+    uint16_t hopCount;
+    rpl_rank_t rank;
+    rpl_dag_t * dag;
+
+    rank = 0; // DEFAULT IF NOT FOUND
+
+    dag = rpl_get_any_dag();
+    if(dag != NULL)
+    {
+        rpl_parent_t * preferred_parent;
+        preferred_parent = dag->preferred_parent;
+        if(preferred_parent != NULL)
+        {
+            rank = preferred_parent->rank;
+        }
+    }
+
+    /*
+     * Integer division, if using MRHOF will we get the same???
+     */
+    hopCount = rank / RPL_MIN_HOPRANKINC;
+    return hopCount;
+}
+
 static uint16_t
 parent_link_metric(rpl_parent_t *p)
 {
@@ -133,6 +161,7 @@ static uint16_t
 parent_path_cost(rpl_parent_t *p)
 {
   uint16_t base;
+//  rpl_dag_t *dag;
 
   if(p == NULL || p->dag == NULL || p->dag->instance == NULL) {
     return 0xffff;
@@ -154,6 +183,8 @@ parent_path_cost(rpl_parent_t *p)
 #else /* RPL_WITH_MC */
   base = p->rank;
 #endif /* RPL_WITH_MC */
+
+  PRINTF("\n hopCount: %u %u ", base/128, getHopCount());
 
   /* path cost upper bound: 0xffff */
   return MIN((uint32_t)base + parent_link_metric(p), 0xffff);
@@ -215,6 +246,7 @@ best_parent(rpl_parent_t *p1, rpl_parent_t *p2)
   dag = p1->dag; /* Both parents are in the same DAG. */
   p1_cost = parent_path_cost(p1);
   p2_cost = parent_path_cost(p2);
+
 
   /* Maintain stability of the preferred parent in case of similar ranks. */
   if(p1 == dag->preferred_parent || p2 == dag->preferred_parent) {
